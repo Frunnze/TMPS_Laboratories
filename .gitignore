@@ -1,1 +1,3 @@
-DB/
+test_singleton.py
+__pycache__
+.DS_Store
