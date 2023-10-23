@@ -31,8 +31,8 @@ class DataSource(metaclass=CustomMeta):
 class DB(DataSource):
     """Deals with the user data."""
     
-    def __init__(self):
-        self.password_manager = PasswordManager()
+    def __init__(self, cipher):
+        self.password_manager = cipher
 
 
     def get_user_data(self, user):  
@@ -50,7 +50,9 @@ class DB(DataSource):
                         return None
                 else:
                     file_data = self.password_manager.decrypt(
-                        file_data, len(user.password), user.password)
+                        encrypted_message=file_data,
+                        key1=len(user.password),
+                        key2=user.password)
                     print(file_data)
                     if user.name in file_data:
                         try:
@@ -69,15 +71,56 @@ class DB(DataSource):
         with open(f'DB/{user_data["user_name"]}.txt', 'w') as file:
             if user.password:
                 encrypted_user_data = self.password_manager.encrypt(
-                    str(user_data), len(user.password), 
-                    user.password)
+                    message=str(user_data), 
+                    key1=len(user.password), 
+                    key2=user.password)
                 file.write(encrypted_user_data)
             else:
                 file.write(str(user_data))
-    
 
-class PasswordManager(metaclass=SingletonMeta):
-    """Encrypts and decrypts the data."""
+
+class SecurityAbstraction:
+    """The abstraction"""
+
+    def __init__(self, security_impl):
+        self.security_impl = security_impl
+
+    def encrypt(self, message, key1, key2):
+        return self.security_impl.encrypt(message, key1, key2)
+
+    def decrypt(self, encrypted_message, key1, key2):
+        return self.security_impl.decrypt(encrypted_message, key1, key2)
+
+
+class Security(ABC):
+    """Implementation interface."""
+
+    @abstractmethod
+    def encrypt():
+        pass
+
+    @abstractmethod
+    def decrypt():
+        pass
+
+
+class VigenereCipherAdapter(Security):
+    """Implementation 1"""
+
+    def __init__(self, vigenere_object):
+        self.vigenere = vigenere_object
+
+    def encrypt(self, message, key1, key2):
+        self.vigenere.key = key2
+        return self.vigenere.get_ciphertext(message)
+    
+    def decrypt(self, encrypted_message, key1, key2):
+        self.vigenere.key = key2
+        return self.vigenere.get_message(encrypted_message)
+
+
+class CaesarCipher(Security):
+    """Implimentation 2: Encrypts and decrypts the data."""
 
     def __init__(self):
         self.alphabet = """ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*()-_=+[]{}|;:'\",.<>?/\\ """
@@ -117,6 +160,44 @@ class PasswordManager(metaclass=SingletonMeta):
             decrypted_message += new_alphabet[map[letter]]
 
         return decrypted_message
+    
+
+class VigenereCipher:
+    """A foreign class that we have to create an adapter class for."""
+
+    def __init__(self, key):
+        self.key = key
+
+    def _extend_key(self, plaintext):
+        extended_key = ""
+        key_length = len(self.key)
+        for char in plaintext:
+            extended_key += self.key[len(extended_key) % key_length]
+        return extended_key
+
+    def get_ciphertext(self, plaintext):
+        extended_key = self._extend_key(plaintext)
+        encrypted_text = ""
+        for i in range(len(plaintext)):
+            char = plaintext[i]
+            key_char = extended_key[i]
+            char_code = ord(char)
+            key_code = ord(key_char)
+            encrypted_char = chr(((char_code - 32 + key_code - 32) % 95) + 32)
+            encrypted_text += encrypted_char
+        return encrypted_text
+
+    def get_message(self, ciphertext):
+        extended_key = self._extend_key(ciphertext)
+        decrypted_text = ""
+        for i in range(len(ciphertext)):
+            char = ciphertext[i]
+            key_char = extended_key[i]
+            char_code = ord(char)
+            key_code = ord(key_char)
+            decrypted_char = chr(((char_code - 32 - (key_code - 32)) % 95) + 32)
+            decrypted_text += decrypted_char
+        return decrypted_text
 
 
 class User(ABC):
@@ -238,11 +319,27 @@ class TasksManager(Manager):
     
 
     def modify(self, new_title, new_dd, task_num, obj_num):
-        """Modifies the objective's title."""
+        """Modifies the task's title."""
 
         index_obj = int(obj_num) - 1
         index_tsk = int(task_num) - 1
         self.user_data['objectives'][index_obj]['tasks'][index_tsk]['title'] = new_title
+        self.user_data['objectives'][index_obj]['tasks'][index_tsk]['due_date'] = new_dd
+
+        return self.user_date
+    
+
+    def modify_name(self, new_title, task_num, obj_num):
+        index_obj = int(obj_num) - 1
+        index_tsk = int(task_num) - 1
+        self.user_data['objectives'][index_obj]['tasks'][index_tsk]['title'] = new_title
+
+        return self.user_data
+    
+
+    def modify_date(self, new_dd, task_num, obj_num):
+        index_obj = int(obj_num) - 1
+        index_tsk = int(task_num) - 1
         self.user_data['objectives'][index_obj]['tasks'][index_tsk]['due_date'] = new_dd
 
         return self.user_data

@@ -40,18 +40,20 @@ class PageBuilder(ABC):
 
 class ObjectivesPageBuilder(PageBuilder):
 
-    def __init__(self, user_data):
+    def __init__(self, header, objectives, commands):
         self.product = Page()
-        self.user_data = user_data
+        self.header = header
+        self.objectives = objectives
+        self.commands = commands
 
     def create_header(self):
-        self.product.header = Header(self.user_data)
+        self.product.header = self.header
 
     def create_body(self):
-        self.product.body = ObjectivesUIList(self.user_data)
+        self.product.body = self.objectives
 
     def create_footer(self):
-        self.product.footer = ObjectivesUIBasicCommands()
+        self.product.footer = self.commands
 
     def get_page(self):
         return self.product
@@ -59,18 +61,20 @@ class ObjectivesPageBuilder(PageBuilder):
 
 class TasksPageBuilder(PageBuilder):
 
-    def __init__(self, user_data):
+    def __init__(self, header, tasks, commands):
         self.product = Page()
-        self.user_data = user_data
+        self.header = header
+        self.tasks = tasks
+        self.commands = commands
 
     def create_header(self):
-        self.product.header = Header(self.user_data)
+        self.product.header =  self.header
 
     def create_body(self):
-        self.product.body = TasksUIList(self.user_data)
+        self.product.body = self.tasks
 
     def create_footer(self):
-        self.product.footer = TasksUIBasicCommands()
+        self.product.footer = self.commands
 
     def get_page(self):
         return self.product
@@ -105,10 +109,30 @@ class Header:
     def __init__(self, user_data):
         self.user_data = user_data
         self.width = 49
+        self.jump = 50
 
     def display(self):
-        print('-'*self.width + '\n'*50)
+        print('-'*self.width + '\n'*self.jump)
         print('User: ' + self.user_data['user_name'])
+
+
+class HeaderDecorator:
+    def __init__(self, header, password):
+        self.width = 49
+        self.header = header
+        self.password = password
+        self.user_data = None
+
+    def display(self):
+        print('\n'*50)
+        if self.password:
+            print('Protected')
+        else:
+            print('Unprotected')
+        
+        self.header.user_data = self.user_data
+        self.header.jump = 0
+        self.header.display()
 
 
 class ObjectivesUIList(Lists):
@@ -175,55 +199,67 @@ class Commands(ABC):
 
 class ObjectivesUIBasicCommands(Commands):
         
-        def __init__(self):
-            self.width = 49
+    def __init__(self):
+        self.width = 49
 
-        def display_commands(self):
-            """Gives a list of commands to apply on the objectives."""
-            
-            print('-'*self.width)
-            print('< back | + add | - delete | o - open | m - modify')
-            print('-'*self.width)
+    def display_commands(self):
+        """Gives a list of commands to apply on the objectives."""
+        
+        print('-'*self.width)
+        print('< back | + add | - delete | o - open | m - modify')
+        print('-'*self.width)
 
-        def clone(self):
-            """Clone it in case there will be layers where you need these
-            exact options."""
+    def clone(self):
+        """Clone it in case there will be layers where you need these
+        exact options."""
 
-            obj = ObjectivesUIBasicCommands()
-            obj.width = self.width
-            return obj
+        obj = ObjectivesUIBasicCommands()
+        obj.width = self.width
+        return obj
 
 
 class TasksUIBasicCommands(Commands):
         
-        def __init__(self):
-            self.width = 49
+    def __init__(self):
+        self.width = 49
 
-        def display_commands(self):
-            """Gives a list of commands to apply on the tasks."""
-            
-            print('-'*self.width)
-            print('< back | + add | - delete | m - modify')
-            print('-'*self.width)
+    def display_commands(self):
+        """Gives a list of commands to apply on the tasks."""
         
-        def clone(self):
-            """Clone it in case there will be layers where you need these
-            exact options."""
+        print('-'*self.width)
+        print('< back | + add | - delete | m - modify')
+        print('-'*self.width)
+    
+    def clone(self):
+        """Clone it in case there will be layers where you need these
+        exact options."""
 
-            obj = TasksUIBasicCommands()
-            obj.width = self.width
-            return obj
+        obj = TasksUIBasicCommands()
+        obj.width = self.width
+        return obj
+        
+
+class TasksUICommandsDecorator:
+    def __init__(self, basic_commands_object):
+        self.width = 49
+        self.basic_commands_object = basic_commands_object
+
+    def display_commands(self):
+        """Gives a list of commands to apply on the tasks."""
+        self.basic_commands_object.display_commands()
+        print('mn - modify name | md - modify date')
+        print('-'*self.width)
 
 
 class TasksUIOptionalCommands(TasksUIBasicCommands):
-        """For LSP."""
-        
-        def __init__(self):
-            super().__init__()
+    """For LSP."""
+    
+    def __init__(self):
+        super().__init__()
 
-        def display_optional_task_commands(self):
-            """Gives a list of optional commands to apply on the tasks."""
-            
-            print('-'*self.width)
-            print('X - delete every task | U - delete one task')
-            print('-'*self.width)
+    def display_optional_task_commands(self):
+        """Gives a list of optional commands to apply on the tasks."""
+        
+        print('-'*self.width)
+        print('X - delete every task | U - delete one task')
+        print('-'*self.width)
