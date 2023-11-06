@@ -17,10 +17,10 @@ class UserFactory:
 class ManagerFactory:
     """Creates an instance of an user."""
     
-    def create(self, manager, user_data):
+    def create(self, manager, db, user):
         """Instantiates the manager classes."""
 
         if manager == "objectives":
-            return ObjectivesManager(user_data)
+            return ObjectivesManager(db, user)
         elif manager == "tasks":
-            return TasksManager(user_data)
+            return TasksManager(db, user)

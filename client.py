@@ -1,11 +1,10 @@
 """Code for user interaction."""
 
-from domain.models.logic import DB, VigenereCipher, VigenereCipherAdapter, SecurityAbstraction
-from domain.models.UI import LoginUI, ObjectivesPageBuilder, TasksPageBuilder
-from domain.models.UI import Header, ObjectivesUIList, ObjectivesUIBasicCommands
-from domain.models.UI import HeaderDecorator, TasksUICommandsDecorator
-from domain.models.UI import TasksUIList, TasksUIBasicCommands
+from abc import ABC, abstractmethod
+
+from domain.models.UI import *
 from domain.factory import UserFactory, ManagerFactory
+from domain.models.logic import *
 
 
 class AppProxy:
@@ -29,11 +28,6 @@ class App:
     def __init__(self):
         self.login_ui  = LoginUI()
         self.user_factory = UserFactory()
-
-        self.security_implementation = VigenereCipherAdapter(VigenereCipher(None))
-        self.security_abstraction = SecurityAbstraction(self.security_implementation)
-        self.db = DB(self.security_abstraction)
-
         self.manager_factory = ManagerFactory()
 
 
@@ -44,8 +38,15 @@ class App:
         while not self.user_data:
             user_name, password = self.login_ui.login()
             user = self.user_factory.create_user(user_name, password)
-            self.user_data = self.db.get_user_data(user)
 
+            # Choose the security strategy
+            if len(password) < 5:
+                strategy = VigenereCipherAdapter(VigenereCipher(None))
+            else:
+                strategy = CaesarCipher()
+            self.db = DB(SecurityContext(strategy))
+
+            self.user_data = self.db.get_user_data(user)
        
         header_object = HeaderDecorator(Header(self.user_data), password)
         objectives_page_builder = ObjectivesPageBuilder(
@@ -67,10 +68,13 @@ class App:
         self.tasks_page = tasks_page_builder.get_page()
 
 
-        self.tasks_manager = self.manager_factory.create("tasks", self.user_data)
-        self.objectives_manager = self.manager_factory.create("objectives", self.user_data)
-
+        self.tasks_manager = self.manager_factory.create("tasks", self.db, user)
+        self.objectives_manager = self.manager_factory.create("objectives", self.db, user)
+        
         self.objectives_page.display_page(self.user_data)
+
+        tasks_caretaker = Caretaker()
+        objectives_caretaker = Caretaker()
 
         opened_tasks_ui = False
         while True:
@@ -81,74 +85,181 @@ class App:
                     while not self.user_data:
                         user_name, password = self.login_ui.login()
                         user = self.user_factory.create_user(user_name, password)
+
+                        # Choose the security strategy
+                        if len(password) < 5:
+                            strategy = VigenereCipherAdapter(VigenereCipher(None))
+                        else:
+                            strategy = CaesarCipher()
+                        self.db.password_manager = SecurityContext(strategy)
+
                         self.user_data = self.db.get_user_data(user)
-                    
+
+                    tasks_caretaker = Caretaker()
+                    objectives_caretaker = Caretaker()
+
+                    self.objectives_manager.user, self.tasks_manager.user = user, user
+                    self.objectives_manager.db, self.tasks_manager.db = self.db, self.db
                     self.objectives_page.header.password = password
                     self.objectives_page.display_page(self.user_data)
-                    self.objectives_manager.user_data = self.user_data
-                    self.tasks_manager.user_data = self.user_data
                 elif command == '+':
-                    objective = input(' '*3 + 'Objective name: ')
-                    self.user_data = self.objectives_manager.add(objective)
-                    self.db.save_user_data(user, self.user_data)
+                    memento = self.objectives_manager.save()
+                    objectives_caretaker.add_memento(memento)
+
+                    objective_name = input(' '*3 + 'Objective name: ')
+
+                    request = AddObjective(
+                        receiver=self.objectives_manager, 
+                        objective_name=objective_name
+                    )
+                    Invoker(request).execute_command()
+
+                    self.user_data = self.db.get_user_data(user)
                     self.objectives_page.display_page(self.user_data)
                 elif command == '-':
+                    memento = self.objectives_manager.save()
+                    objectives_caretaker.add_memento(memento)
+
                     objective_number = input(' '*3 + 'Objective number: ')
-                    self.user_data = self.objectives_manager.delete(objective_number)
-                    self.db.save_user_data(user, self.user_data)
+
+                    request = DeleteObjective(
+                        receiver=self.objectives_manager, 
+                        objective_number=objective_number
+                    )
+                    Invoker(request).execute_command()
+
+                    self.user_data = self.db.get_user_data(user)
                     self.objectives_page.display_page(self.user_data)
                 elif command == 'o':
                     objective_number = input(' '*3 + 'Objective number: ')
+                    self.user_data = self.db.get_user_data(user)
                     self.tasks_page.body.obj_num = objective_number
                     self.tasks_page.display_page(self.user_data)
+                    self.tasks_manager.user_data = self.db.get_user_data(user)
                     opened_tasks_ui = True
+                    tasks_caretaker = Caretaker()
                 elif command == 'm':
+                    memento = self.objectives_manager.save()
+                    objectives_caretaker.add_memento(memento)
+
                     objective_number = input(' '*3 + 'Objective number: ')
                     new_title = input(' '*3 + 'New title: ')
-                    self.user_data = self.objectives_manager.modify(new_title, objective_number)
-                    self.db.save_user_data(user, self.user_data)
+
+                    request = ModifyObjective(
+                        receiver=self.objectives_manager, 
+                        objective_number=objective_number,
+                        objective_title=new_title
+                    )
+                    Invoker(request).execute_command()
+
+                    self.user_data = self.db.get_user_data(user)
                     self.objectives_page.display_page(self.user_data)
+                elif command == 'u':
+                    memento = objectives_caretaker.get_memento()
+                    if memento:
+                        memento.restore()
+                        self.objectives_page.display_page(memento.user_data)
             else:
                 if command == '<':
+                    self.user_data = self.db.get_user_data(user)
+                    self.objectives_manager.user_data = self.user_data
                     self.objectives_page.display_page(self.user_data)
                     opened_tasks_ui = False
                 elif command == '+':
+                    memento = self.tasks_manager.save()
+                    tasks_caretaker.add_memento(memento)
+
                     task_title = input(' '*3 + 'Task name: ')
                     due_date = input(' '*3 + 'Due date: ')
-                    self.user_data = self.tasks_manager.add(task_title, due_date, objective_number)
-                    self.db.save_user_data(user, self.user_data)
+
+                    request = AddTask(
+                        receiver=self.tasks_manager, 
+                        task_title=task_title,
+                        due_date=due_date, 
+                        objective_number=objective_number
+                    )
+                    Invoker(request).execute_command()
+
+                    self.user_data = self.db.get_user_data(user)
                     self.tasks_page.body.obj_num = objective_number
                     self.tasks_page.display_page(self.user_data)
                 elif command == '-':
+                    memento = self.tasks_manager.save()
+                    tasks_caretaker.add_memento(memento)
+
                     task_number = input(' '*3 + 'Task number: ')
-                    self.user_data = self.tasks_manager.delete(task_number, objective_number)
-                    self.db.save_user_data(user, self.user_data)
+
+                    request = DeleteTask(
+                        receiver=self.tasks_manager, 
+                        task_number=task_number,
+                        objective_number=objective_number
+                    )
+                    Invoker(request).execute_command()
+
+                    self.user_data = self.db.get_user_data(user)
                     self.tasks_page.body.obj_num = objective_number
                     self.tasks_page.display_page(self.user_data)
                 elif command == 'm':
+                    memento = self.tasks_manager.save()
+                    tasks_caretaker.add_memento(memento)
+
                     task_number = input(' '*3 + 'Task number: ')
                     new_title = input(' '*3 + 'New title: ')
                     new_dd = input(' '*3 + 'New due date: ')
-                    self.user_data = self.tasks_manager.modify(new_title, new_dd, task_number, objective_number)
-                    self.db.save_user_data(user, self.user_data)
+
+                    request = ModifyTask(
+                        receiver=self.tasks_manager, 
+                        new_title=new_title,
+                        new_dd=new_dd,
+                        task_number=task_number, 
+                        objective_number=objective_number
+                    )
+                    Invoker(request).execute_command()
+
+                    self.user_data = self.db.get_user_data(user)
                     self.tasks_page.body.obj_num = objective_number
                     self.tasks_page.display_page(self.user_data)
                 elif command == 'mn':
+                    memento = self.tasks_manager.save()
+                    tasks_caretaker.add_memento(memento)
+
                     task_number = input(' '*3 + 'Task number: ')
                     new_title = input(' '*3 + 'New title: ')
-                    self.user_data = self.tasks_manager.modify_name(new_title, task_number, objective_number)
 
-                    self.db.save_user_data(user, self.user_data)
+                    request = ModifyTaskName(
+                        receiver=self.tasks_manager, 
+                        new_title=new_title,
+                        task_number=task_number, 
+                        objective_number=objective_number
+                    )
+                    Invoker(request).execute_command()
+
+                    self.user_data = self.db.get_user_data(user)
                     self.tasks_page.body.obj_num = objective_number
                     self.tasks_page.display_page(self.user_data)
                 elif command == 'md':
+                    memento = self.tasks_manager.save()
+                    tasks_caretaker.add_memento(memento)
+
                     task_number = input(' '*3 + 'Task number: ')
                     new_dd = input(' '*3 + 'New due date: ')
-                    self.user_data = self.tasks_manager.modify_date(new_dd, task_number, objective_number)
 
-                    self.db.save_user_data(user, self.user_data)
+                    request = ModifyTaskDate(
+                        receiver=self.tasks_manager, 
+                        new_dd=new_dd,
+                        task_number=task_number, 
+                        objective_number=objective_number
+                    )
+                    Invoker(request).execute_command()
+
+                    self.user_data = self.db.get_user_data(user)
                     self.tasks_page.body.obj_num = objective_number
                     self.tasks_page.display_page(self.user_data)
+                elif command == 'u':
+                    memento = tasks_caretaker.get_memento()
+                    if memento:
+                        memento.restore()
+                        self.tasks_page.display_page(memento.user_data)
 
 
 my_app = AppProxy(App())

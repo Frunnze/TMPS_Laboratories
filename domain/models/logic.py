@@ -53,7 +53,6 @@ class DB(DataSource):
                         encrypted_message=file_data,
                         key1=len(user.password),
                         key2=user.password)
-                    print(file_data)
                     if user.name in file_data:
                         try:
                             return eval(file_data)
@@ -79,21 +78,22 @@ class DB(DataSource):
                 file.write(str(user_data))
 
 
-class SecurityAbstraction:
-    """The abstraction"""
+# Strategy design pattern
+class SecurityContext:
+    """Context"""
 
-    def __init__(self, security_impl):
-        self.security_impl = security_impl
+    def __init__(self, strategy):
+        self.strategy = strategy
 
     def encrypt(self, message, key1, key2):
-        return self.security_impl.encrypt(message, key1, key2)
+        return self.strategy.encrypt(message, key1, key2)
 
     def decrypt(self, encrypted_message, key1, key2):
-        return self.security_impl.decrypt(encrypted_message, key1, key2)
+        return self.strategy.decrypt(encrypted_message, key1, key2)
+    
 
-
-class Security(ABC):
-    """Implementation interface."""
+class SecurityStrategy(ABC):
+    """Strategy interface."""
 
     @abstractmethod
     def encrypt():
@@ -104,8 +104,8 @@ class Security(ABC):
         pass
 
 
-class VigenereCipherAdapter(Security):
-    """Implementation 1"""
+class VigenereCipherAdapter(SecurityStrategy):
+    """Strategy 1"""
 
     def __init__(self, vigenere_object):
         self.vigenere = vigenere_object
@@ -119,8 +119,8 @@ class VigenereCipherAdapter(Security):
         return self.vigenere.get_message(encrypted_message)
 
 
-class CaesarCipher(Security):
-    """Implimentation 2: Encrypts and decrypts the data."""
+class CaesarCipher(SecurityStrategy):
+    """Strategy 2: Encrypts and decrypts the data."""
 
     def __init__(self):
         self.alphabet = """ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*()-_=+[]{}|;:'\",.<>?/\\ """
@@ -236,11 +236,138 @@ class ProtectedUser(User):
         return user_data
     
 
+# Command design pattern
+class Command(ABC):
+    """Interface"""
+    @abstractmethod
+    def execute(self):
+        pass
+
+
+class Invoker:
+    def __init__(self, command):
+        self._command = command
+
+    def execute_command(self):
+        self._command.execute()
+
+
+class AddObjective(Command):
+    """Concrete command"""
+    def __init__(self, receiver, objective_name):
+        self.receiver = receiver
+        self.objective_name = objective_name
+
+    def execute(self):
+        self.receiver.add(self.objective_name)
+
+
+class DeleteObjective(Command):
+    """Concrete command"""
+    def __init__(self, receiver, objective_number):
+        self.receiver = receiver
+        self.objective_number = objective_number
+
+    def execute(self):
+        self.receiver.delete(self.objective_number)
+
+
+class ModifyObjective(Command):
+    """Concrete command"""
+    def __init__(self, receiver, objective_number, objective_title):
+        self.receiver = receiver
+        self.objective_number = objective_number
+        self.objective_title = objective_title
+
+    def execute(self):
+        self.receiver.modify(
+            self.objective_title, 
+            self.objective_number
+        )
+
+
+class AddTask(Command):
+    """Concrete command"""
+    def __init__(self, receiver, task_title, due_date, objective_number):
+        self.receiver = receiver
+        self.task_title = task_title
+        self.due_date = due_date
+        self.objective_number = objective_number
+
+    def execute(self):
+        self.receiver.add(
+            self.task_title,
+            self.due_date,
+            self.objective_number
+        )
+
+
+class DeleteTask(Command):
+    """Concrete command"""
+    def __init__(self, receiver, task_number, objective_number):
+        self.receiver = receiver
+        self.task_number = task_number
+        self.objective_number = objective_number
+
+    def execute(self):
+        self.receiver.delete(
+            self.task_number,
+            self.objective_number
+        )
+
+
+class ModifyTask(Command):
+    """Concrete command"""
+    def __init__(self, receiver, new_title, new_dd, task_number, objective_number):
+        self.receiver = receiver
+        self.new_title = new_title
+        self.new_dd = new_dd
+        self.task_number = task_number
+        self.objective_number = objective_number
+
+    def execute(self):
+        self.receiver.modify(
+            self.new_title,
+            self.new_dd,
+            self.task_number,
+            self.objective_number
+        )
+
+
+class ModifyTaskName(Command):
+    """Concrete command"""
+    def __init__(self, receiver, new_title, task_number, objective_number):
+        self.receiver = receiver
+        self.new_title = new_title
+        self.task_number = task_number
+        self.objective_number = objective_number
+
+    def execute(self):
+        self.receiver.modify_name(
+            self.new_title,
+            self.task_number,
+            self.objective_number
+        )
+
+
+class ModifyTaskDate(Command):
+    """Concrete command"""
+    def __init__(self, receiver, new_dd, task_number, objective_number):
+        self.receiver = receiver
+        self.new_dd = new_dd
+        self.task_number = task_number
+        self.objective_number = objective_number
+
+    def execute(self):
+        self.receiver.modify_date(
+            self.new_dd,
+            self.task_number,
+            self.objective_number
+        )
+    
+
 class Manager(ABC):
     """A contract for the managers."""
-
-    def __init__(self, user_data):
-        self.user_data = user_data
 
     @abstractmethod
     def add(self):
@@ -255,15 +382,51 @@ class Manager(ABC):
         pass
 
 
+# Memento design pattern.
+class Memento:
+    """Represents the state of the originator"""
+
+    def __init__(self, originator, user_data, db, user):
+        self.originator = originator
+        self.user_data = user_data
+        self.db = db
+        self.user = user
+
+    def restore(self):
+        self.originator.user_data = self.user_data
+        self.originator.db = self.db
+        self.originator.user = self.user
+        self.db.save_user_data(self.user, self.user_data)
+
+# Caretaker: Manages and keeps track of Mementos
+class Caretaker:
+    def __init__(self):
+        self.mementos = []
+
+    def add_memento(self, memento):
+        self.mementos.append(memento)
+
+    def get_memento(self):
+        if self.mementos:
+            return self.mementos.pop()
+        else:
+            return None
+
+
 class ObjectivesManager(Manager):
     """Manages the objectives."""
 
-    def __init__(self, user_data):
-        super().__init__(user_data)
+    def __init__(self, db, user):
+        self.db = db
+        self.user = user
+        self.user_data = self.db.get_user_data(self.user)
 
+    def save(self):
+        return Memento(self, self.user_data, self.db, self.user)
 
     def add(self, objective_title):
         """Save the objective to the user data."""
+        self.user_data = self.db.get_user_data(self.user)
 
         for objectives in self.user_data['objectives']:
             if objectives['title'] == objective_title:
@@ -272,31 +435,41 @@ class ObjectivesManager(Manager):
         tmp_dict = {'title': objective_title, 'tasks': []}
         self.user_data['objectives'].append(tmp_dict)
 
-        return self.user_data
-    
+        self.db.save_user_data(self.user, self.user_data)
 
     def delete(self, objective_num):
         """Deletes the objective from the user data."""
+        self.user_data = self.db.get_user_data(self.user)
 
         del self.user_data['objectives'][int(objective_num) - 1]
-        return self.user_data
+
+        self.db.save_user_data(self.user, self.user_data)
     
 
     def modify(self, new_title, obj_num):
         """Modifies the objective's title."""
+        self.user_data = self.db.get_user_data(self.user)
+
         self.user_data['objectives'][int(obj_num) - 1]['title'] = new_title
-        return self.user_data
+
+        self.db.save_user_data(self.user, self.user_data)
 
 
 class TasksManager(Manager):
     """Manages the tasks."""
 
-    def __init__(self, user_data):
-        super().__init__(user_data)
+    def __init__(self, db, user):
+        self.db = db
+        self.user = user
+        self.user_data = self.db.get_user_data(self.user)
 
+    def save(self):
+        return Memento(self, self.user_data, self.db, self.user)
 
     def add(self, task_title, due_date, obj_num):
         """Save the task to the objective list."""
+
+        self.user_data = self.db.get_user_data(self.user)
 
         index = int(obj_num) - 1
         for task in self.user_data['objectives'][index]['tasks']:
@@ -306,40 +479,47 @@ class TasksManager(Manager):
         tmp_dict = {'title': task_title, 'due_date': due_date}
         self.user_data['objectives'][index]['tasks'].append(tmp_dict)
 
-        return self.user_data
+        self.db.save_user_data(self.user, self.user_data)
     
 
     def delete(self, task_num, obj_num):
         """Deletes the objective from the user data."""
 
+        self.user_data = self.db.get_user_data(self.user)
+
         index_obj = int(obj_num) - 1
         index_tsk = int(task_num) - 1
         del self.user_data['objectives'][index_obj]['tasks'][index_tsk]
-        return self.user_data
+
+        self.db.save_user_data(self.user, self.user_data)
     
 
     def modify(self, new_title, new_dd, task_num, obj_num):
         """Modifies the task's title."""
+        self.user_data = self.db.get_user_data(self.user)
 
         index_obj = int(obj_num) - 1
         index_tsk = int(task_num) - 1
         self.user_data['objectives'][index_obj]['tasks'][index_tsk]['title'] = new_title
         self.user_data['objectives'][index_obj]['tasks'][index_tsk]['due_date'] = new_dd
 
-        return self.user_date
+        self.db.save_user_data(self.user, self.user_data)
     
 
     def modify_name(self, new_title, task_num, obj_num):
+        self.user_data = self.db.get_user_data(self.user)
         index_obj = int(obj_num) - 1
         index_tsk = int(task_num) - 1
         self.user_data['objectives'][index_obj]['tasks'][index_tsk]['title'] = new_title
 
-        return self.user_data
+        self.db.save_user_data(self.user, self.user_data)
     
 
     def modify_date(self, new_dd, task_num, obj_num):
+        self.user_data = self.db.get_user_data(self.user)
+        
         index_obj = int(obj_num) - 1
         index_tsk = int(task_num) - 1
         self.user_data['objectives'][index_obj]['tasks'][index_tsk]['due_date'] = new_dd
 
-        return self.user_data
+        self.db.save_user_data(self.user, self.user_data)

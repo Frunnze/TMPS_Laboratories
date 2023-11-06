@@ -247,7 +247,7 @@ class TasksUICommandsDecorator:
     def display_commands(self):
         """Gives a list of commands to apply on the tasks."""
         self.basic_commands_object.display_commands()
-        print('mn - modify name | md - modify date')
+        print('mn - modify name | md - modify date | u - undo')
         print('-'*self.width)
 
 
